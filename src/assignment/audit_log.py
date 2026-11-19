@@ -27,7 +27,17 @@ class AuditLogPlugin:
 
     def record_input(self, *, user_id: str, text: str, request_id: str | None = None):
         """TODO: store input + start timestamp keyed by request_id/user_id."""
-        raise NotImplementedError("Implement AuditLogPlugin.record_input")
+        key = request_id or f"{user_id}-{len(self.logs)}"
+        self._open[key] = datetime.now(timezone.utc).timestamp()
+
+        self.logs.append({
+            "event": "input",
+            "request_id": request_id,
+            "user_id": user_id,
+            "text": text,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        
 
     def record_output(
         self,
@@ -39,14 +49,34 @@ class AuditLogPlugin:
         request_id: str | None = None,
     ):
         """TODO: store output, layer decision, latency; append to self.logs."""
-        raise NotImplementedError("Implement AuditLogPlugin.record_output")
+        key = request_id or f"{user_id}-{len(self.logs)}"
+        start_time = self._open.pop(key, None)
+        latency = (
+            round(datetime.now(timezone.utc).timestamp() - start_time, 3)
+            if start_time is not None
+            else None
+        )
+
+        self.logs.append({
+            "event": "output",
+            "request_id": request_id,
+            "user_id": user_id,
+            "text": text,
+            "blocked": blocked,
+            "layer": layer,
+            "latency_seconds": latency,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
     def export_json(self, filepath: str | None = None):
         """Write logs to disk (JSON array) under repo-root ``outputs/`` by default."""
         # TODO: path = filepath or default_audit_log_path()
         #       ensure parent dirs exist, dump self.logs with indent=2
-        _ = filepath or default_audit_log_path()
-        raise NotImplementedError("Implement AuditLogPlugin.export_json")
+        path = Path(filepath or default_audit_log_path())
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(self.logs, f, ensure_ascii=False, indent=2)
 
 
 def utc_now_iso() -> str:

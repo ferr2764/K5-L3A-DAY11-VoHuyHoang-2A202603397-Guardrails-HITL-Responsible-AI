@@ -47,6 +47,12 @@ def content_filter(response: str) -> dict:
         # - National ID (CMND/CCCD): r"\b\d{9}\b|\b\d{12}\b"
         # - API key pattern: r"sk-[a-zA-Z0-9-]+"
         # - Password pattern: r"password\s*[:=]\s*\S+"
+
+        r"VN Phone": r"0\d{9,10}",
+        r"Email": r"[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}",
+        r"National ID": r"\b\d{9}\b|\b\d{12}\b",
+        r"API Key": r"sk-[a-zA-Z0-9-]+",
+        r"Password": r"\bpassword\s*(?:[:=]|\bis\b)\s*\S+",
     }
 
     for name, pattern in PII_PATTERNS.items():
@@ -181,7 +187,19 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
         #    - Increment self.blocked_count
         # 3. Return llm_response (possibly modified)
 
-        return llm_response  # TODO: modify if needed
+        filtered = content_filter(response_text)
+
+        if not filtered["safe"]:
+            llm_response.content = types.Content(
+                role="model",
+                parts=[
+                    types.Part.from_text(text=filtered["redacted"])
+                ],
+            )
+            self.redacted_count += 1
+
+        # LLM-as-Judge là tùy chọn; theo checkpoint, có thể bỏ qua.
+        return llm_response
 
 
 # ============================================================
